@@ -1937,7 +1937,7 @@
   },
   "tests/unit/proxy-registry.test.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 55
+      "count": 54
     }
   },
   "tests/unit/proxy-resolution-status-filter.test.ts": {
