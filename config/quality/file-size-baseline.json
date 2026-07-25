@@ -267,13 +267,10 @@
     "src/app/(dashboard)/dashboard/endpoint/EndpointPageClient.tsx": 2615,
     "src/app/(dashboard)/dashboard/health/page.tsx": 1165,
     "src/app/(dashboard)/dashboard/playground/components/tabs/ApiTab.tsx": 847,
-    "src/app/(dashboard)/dashboard/providers/[id]/ProviderDetailPageClient.tsx": 798,
     "src/app/(dashboard)/dashboard/providers/[id]/components/ConnectionRow.tsx": 922,
     "src/app/(dashboard)/dashboard/providers/[id]/components/modals/AddApiKeyModal.tsx": 967,
     "src/app/(dashboard)/dashboard/providers/[id]/components/modals/EditConnectionModal.tsx": 1283,
     "src/app/(dashboard)/dashboard/providers/[id]/hooks/useProviderConnections.ts": 945,
-    "src/app/(dashboard)/dashboard/providers/[id]/hooks/useProviderModels.ts": 155,
-    "src/app/(dashboard)/dashboard/providers/[id]/hooks/useProviderSettings.ts": 264,
     "src/app/(dashboard)/dashboard/providers/[id]/providerPageHelpers.ts": 929,
     "src/app/(dashboard)/dashboard/providers/components/onboarding/ProviderOnboardingWizard.tsx": 948,
     "src/app/(dashboard)/dashboard/providers/page.tsx": 1918,
@@ -321,9 +318,7 @@
     "src/shared/services/cliRuntime.ts": 1122,
     "src/sse/handlers/chat.ts": 1862,
     "src/sse/handlers/chatHelpers.ts": 878,
-    "src/sse/services/auth.ts": 2486,
-    "tests/unit/account-fallback-service.test.ts": 1572,
-    "tests/unit/provider-validation-specialty.test.ts": 2980
+    "src/sse/services/auth.ts": 2486
   },
   "testCap": 800,
   "testFrozen": {
