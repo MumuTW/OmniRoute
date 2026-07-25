@@ -76,9 +76,14 @@ jobs:
               continue
             fi
 
+            # compare/BASE...HEAD reports the status of HEAD relative to BASE,
+            # so upstream has to be the base for "behind" to mean "the fork is
+            # behind upstream". Getting this backwards makes every out-of-date
+            # branch look 'ahead' and silently skip.
+            #
             # Compare by SHA rather than by ref name: branch names contain
             # slashes, which are ambiguous in a compare basehead path.
-            status=$(gh api "repos/$FORK/compare/$fork_sha...$up_sha" --jq .status)
+            status=$(gh api "repos/$FORK/compare/$up_sha...$fork_sha" --jq .status)
 
             case "$status" in
               identical)
