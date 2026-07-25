@@ -1,0 +1,122 @@
+name: sync-fork
+
+# Keeps MumuTW/OmniRoute (this fork) aligned with diegosouzapw/OmniRoute.
+#
+# Lives on the orphan `automation` branch, which is this fork's default branch.
+# That is deliberate: GitHub only schedules workflows from the default branch,
+# and putting this file on `main` / `release/*` would make those branches
+# diverge from upstream — which is exactly what this workflow exists to prevent.
+#
+# Only fast-forwardable branches are touched. A branch that has diverged is
+# reported and skipped, never merged.
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-fork
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: diegosouzapw/OmniRoute
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync branches from upstream
+        env:
+          # GITHUB_TOKEN is tried first. If upstream commits touch
+          # .github/workflows/** GitHub may refuse the ref update, in which case
+          # add a PAT with `repo` + `workflow` scope as the SYNC_TOKEN secret.
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
+          FORK: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [ -n "${{ secrets.SYNC_TOKEN }}" ]; then
+            echo "auth: SYNC_TOKEN (PAT)"
+          else
+            echo "auth: GITHUB_TOKEN (default)"
+          fi
+
+          upstream_default=$(gh api "repos/$UPSTREAM" --jq .default_branch)
+          echo "upstream default branch: $upstream_default"
+
+          # Track main plus every semver release branch upstream publishes, so a
+          # new release/vX.Y.Z is picked up without editing this file.
+          mapfile -t targets < <(
+            gh api --paginate "repos/$UPSTREAM/branches" --jq '.[].name' \
+              | grep -E '^(main|release/v[0-9]+\.[0-9]+\.[0-9]+)$' \
+              | sort -u
+          )
+          echo "candidate branches: ${#targets[@]}"
+
+          synced=(); created=(); uptodate=(); skipped=(); failed=()
+
+          for b in "${targets[@]}"; do
+            up_sha=$(gh api "repos/$UPSTREAM/branches/$b" --jq .commit.sha)
+
+            # Branch upstream has but the fork does not: create it outright.
+            # Fork networks share an object store, so the SHA is already present.
+            if ! fork_sha=$(gh api "repos/$FORK/branches/$b" --jq .commit.sha 2>/dev/null); then
+              if gh api -X POST "repos/$FORK/git/refs" \
+                   -f ref="refs/heads/$b" -f sha="$up_sha" >/dev/null 2>&1; then
+                echo "::notice::created $b at ${up_sha:0:9}"
+                created+=("$b")
+              else
+                echo "::warning::could not create $b"
+                failed+=("$b")
+              fi
+              continue
+            fi
+
+            # Compare by SHA rather than by ref name: branch names contain
+            # slashes, which are ambiguous in a compare basehead path.
+            status=$(gh api "repos/$FORK/compare/$fork_sha...$up_sha" --jq .status)
+
+            case "$status" in
+              identical)
+                uptodate+=("$b")
+                ;;
+              behind)
+                if gh api -X POST "repos/$FORK/merge-upstream" \
+                     -f branch="$b" --jq .merge_type >/dev/null 2>&1; then
+                  echo "::notice::synced $b -> ${up_sha:0:9}"
+                  synced+=("$b")
+                else
+                  echo "::error::merge-upstream failed for $b (workflow-scope token may be required)"
+                  failed+=("$b")
+                fi
+                ;;
+              *)
+                # ahead or diverged: the fork carries commits upstream lacks.
+                # Fast-forward is impossible; leave it entirely alone.
+                echo "::warning::$b is '$status' vs upstream — skipped, resolve by hand"
+                skipped+=("$b")
+                ;;
+            esac
+          done
+
+          {
+            echo "### Fork sync"
+            echo
+            echo "Upstream \`$UPSTREAM\` default: \`$upstream_default\`"
+            echo
+            echo "| result | count | branches |"
+            echo "|---|---|---|"
+            echo "| synced | ${#synced[@]} | ${synced[*]:-–} |"
+            echo "| created | ${#created[@]} | ${created[*]:-–} |"
+            echo "| already current | ${#uptodate[@]} | ${uptodate[*]:-–} |"
+            echo "| skipped (diverged) | ${#skipped[@]} | ${skipped[*]:-–} |"
+            echo "| failed | ${#failed[@]} | ${failed[*]:-–} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Diverged branches are a normal state for a fork you develop in, so
+          # only a hard API failure fails the run.
+          [ ${#failed[@]} -eq 0 ]
