@@ -763,6 +763,7 @@ async function handleChatCoreInner({
     // sub-requests (fusion panel + judge re-enter chatCore sharing the client's headers)
     // can never collide on the raw Idempotency-Key/x-request-id header key.
     body,
+    apiKeyId: apiKeyInfo?.id ?? null,
     effectiveServiceTier,
     startTime,
     log,
