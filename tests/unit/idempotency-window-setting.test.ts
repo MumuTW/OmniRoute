@@ -46,3 +46,34 @@ test("a saved entry honors the passed window and expires after it", async () => 
   assert.ok(layer.checkIdempotency("k-long"));
   layer.clearIdempotency();
 });
+
+test("saveIdempotencyWithConfiguredWindow stores with the configured window", async () => {
+  layer.clearIdempotency();
+  await settings.updateSettings({ idempotencyWindowMs: 20 });
+  await layer.saveIdempotencyWithConfiguredWindow("k-cfg", { ok: true }, 200);
+  assert.ok(layer.checkIdempotency("k-cfg"));
+  await new Promise((r) => setTimeout(r, 40));
+  assert.equal(layer.checkIdempotency("k-cfg"), null);
+
+  await settings.updateSettings({ idempotencyWindowMs: 60_000 });
+  await layer.saveIdempotencyWithConfiguredWindow("k-cfg-long", { ok: true }, 200);
+  await new Promise((r) => setTimeout(r, 40));
+  assert.ok(layer.checkIdempotency("k-cfg-long"));
+  layer.clearIdempotency();
+});
+
+test("saveIdempotencyWithConfiguredWindow ignores a missing key", async () => {
+  layer.clearIdempotency();
+  await layer.saveIdempotencyWithConfiguredWindow(null, { ok: true }, 200);
+  assert.equal((await layer.getIdempotencyStats()).activeKeys, 0);
+});
+
+test("chatCore saves idempotency through the configured-window helper", () => {
+  // Pins the call-site wiring: the regression was the save site never passing the window.
+  const src = fs.readFileSync(
+    path.join(import.meta.dirname, "../../open-sse/handlers/chatCore.ts"),
+    "utf8"
+  );
+  assert.match(src, /await saveIdempotencyWithConfiguredWindow\(/);
+  assert.doesNotMatch(src, /[^\w]saveIdempotency\(/);
+});

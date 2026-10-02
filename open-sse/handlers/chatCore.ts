@@ -388,7 +388,7 @@ import {
   recordCoreOwnedAntigravityQuotaState,
   shouldDeferAntigravityQuotaStateToCaller,
 } from "../services/accountFallback.ts";
-import { getIdempotencyWindowMs, saveIdempotency } from "@/lib/idempotencyLayer";
+import { saveIdempotencyWithConfiguredWindow } from "@/lib/idempotencyLayer";
 import {
   isModelUnavailableError,
   getNextFamilyFallback,
@@ -5668,14 +5668,7 @@ async function handleChatCoreInner({
       // ── Phase 9.2: Save for idempotency ──
       // Reuse the key resolved by checkIdempotencyCache() above (single derivation per
       // request). (#3821-review LEDGER-6)
-      // The configured window (Settings → Cache → idempotencyWindowMs) has to reach the store;
-      // saveIdempotency() only knows the 5s default when it is not passed one.
-      saveIdempotency(
-        idempotencyKey,
-        translatedResponse,
-        200,
-        idempotencyKey ? await getIdempotencyWindowMs() : undefined
-      );
+      await saveIdempotencyWithConfiguredWindow(idempotencyKey, translatedResponse, 200);
       reqLogger.logConvertedResponse(translatedResponse);
       persistAttemptLogs({
         status: 200,

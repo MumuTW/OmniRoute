@@ -97,6 +97,15 @@ export async function getIdempotencyWindowMs() {
 }
 
 /**
+ * Save a response for idempotency dedup using the configured window
+ * (Settings → Cache → idempotencyWindowMs). The settings read only happens when there is a key.
+ */
+export async function saveIdempotencyWithConfiguredWindow(key, response, status) {
+  if (!key) return;
+  saveIdempotency(key, response, status, await getIdempotencyWindowMs());
+}
+
+/**
  * Get current idempotency store stats.
  */
 export async function getIdempotencyStats() {
