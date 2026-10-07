@@ -69,11 +69,17 @@ test("saveIdempotencyWithConfiguredWindow ignores a missing key", async () => {
 });
 
 test("chatCore saves idempotency through the configured-window helper", () => {
-  // Pins the call-site wiring: the regression was the save site never passing the window.
-  const src = fs.readFileSync(
+  // The non-streaming save moved into runNonStreamingResponse. chatCore must hand it
+  // the configured-window helper, and that helper must be awaited at the save site.
+  const chatCore = fs.readFileSync(
     path.join(import.meta.dirname, "../../open-sse/handlers/chatCore.ts"),
     "utf8"
   );
-  assert.match(src, /await saveIdempotencyWithConfiguredWindow\(/);
-  assert.doesNotMatch(src, /[^\w]saveIdempotency\(/);
+  const nonStreaming = fs.readFileSync(
+    path.join(import.meta.dirname, "../../open-sse/handlers/chatCore/nonStreamingResponse.ts"),
+    "utf8"
+  );
+  assert.match(chatCore, /saveIdempotency:\s*saveIdempotencyWithConfiguredWindow/);
+  assert.doesNotMatch(chatCore, /[^\w]saveIdempotency\(/);
+  assert.match(nonStreaming, /await saveIdempotency\(idempotencyKey, translatedResponse, 200\)/);
 });
