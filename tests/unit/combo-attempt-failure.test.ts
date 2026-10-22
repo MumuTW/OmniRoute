@@ -9,7 +9,8 @@ const ORIGINAL_DATA_DIR = process.env.DATA_DIR;
 const ORIGINAL_PROSE_FLAG = process.env.RETRY_AFTER_PROVENANCE_ENABLED;
 process.env.DATA_DIR = TEST_DATA_DIR;
 
-const { readAttemptFailure } = await import("../../open-sse/services/combo/attemptFailure.ts");
+const { readAttemptFailure, resolveAttemptRetryAfter } =
+  await import("../../open-sse/services/combo/attemptFailure.ts");
 const { isQuotaExhaustionFailure, isQuotaExhaustionResponse, recordQuotaExhaustionClassification } =
   await import("../../open-sse/services/combo/quotaExhaustion.ts");
 const { resetDbInstance } = await import("../../src/lib/db/core.ts");
@@ -79,7 +80,7 @@ for (const entry of RETRY_CASES) {
     const failure = await readAttemptFailure(
       refusal(JSON.stringify(entry.body), { "Retry-After": "1" })
     );
-    assert.equal(failure.retryAfter, entry.expected);
+    assert.equal(resolveAttemptRetryAfter(failure), entry.expected);
   });
 }
 
@@ -89,14 +90,14 @@ test("opt-in prose is preferred to the header, but never to a structured hint", 
   const prose = "Too many requests. Please retry after 30s";
 
   const plain = await readAttemptFailure(refusal(prose, { "Retry-After": "60" }));
-  assert.equal(plain.retryAfter, "2026-10-23T00:00:30.000Z");
+  assert.equal(resolveAttemptRetryAfter(plain), "2026-10-23T00:00:30.000Z");
 
   const structured = await readAttemptFailure(
     refusal(JSON.stringify({ error: { message: prose, retry_after: 5 } }), {
       "Retry-After": "60",
     })
   );
-  assert.equal(structured.retryAfter, "2026-10-23T00:00:05.000Z");
+  assert.equal(resolveAttemptRetryAfter(structured), "2026-10-23T00:00:05.000Z");
 });
 
 test("prose stays opt-in and malformed bodies retain header retry timing", async (t) => {
@@ -104,7 +105,7 @@ test("prose stays opt-in and malformed bodies retain header retry timing", async
   const failure = await readAttemptFailure(
     refusal("Please retry after 30s", { "Retry-After": "60" })
   );
-  assert.equal(failure.retryAfter, "2026-10-23T00:01:00.000Z");
+  assert.equal(resolveAttemptRetryAfter(failure), "2026-10-23T00:01:00.000Z");
 });
 
 test("a failed clone keeps the status text and header retry timing", async (t) => {
@@ -115,7 +116,7 @@ test("a failed clone keeps the status text and header retry timing", async (t) =
   assert.equal(failure.errorText, STATUS_TEXT);
   assert.equal(failure.quota.text, STATUS_TEXT);
   assert.equal(failure.errorBody, null);
-  assert.equal(failure.retryAfter, "2026-10-23T00:01:00.000Z");
+  assert.equal(resolveAttemptRetryAfter(failure), "2026-10-23T00:01:00.000Z");
 });
 
 const PROJECTION_CASES = [

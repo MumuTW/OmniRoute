@@ -95,7 +95,7 @@ import {
 } from "./executeTargetClassify.ts";
 import type { CompressionMode } from "../compression/types.ts";
 import type { ExecuteTargetResult, ExecuteTargetAttemptOptions } from "./attemptLoopTypes.ts";
-import { readAttemptFailure } from "./attemptFailure.ts";
+import { readAttemptFailure, resolveAttemptRetryAfter } from "./attemptFailure.ts";
 import type { ResponseValidationConfig } from "./responseValidation.ts";
 import { resolveComboDailyReset } from "./comboDailyResetClock.ts";
 import type { ProtectedPriorityStopCause } from "./protectedPriorityStopStatus.ts";
@@ -707,7 +707,8 @@ export async function executeTargetAttempt(
     }
 
     const failure = await readAttemptFailure(result, { log: deps.log, modelStr });
-    const { errorText, errorBody, retryAfter, structuredError } = failure;
+    const { errorText, errorBody, structuredError } = failure;
+    const retryAfter = resolveAttemptRetryAfter(failure);
 
     // Track earliest retryAfter
     if (

@@ -17,7 +17,8 @@ export interface AttemptFailure {
   readonly errorText: string;
   readonly errorBody: ComboErrorBody;
   readonly structuredError: StructuredAttemptError | undefined;
-  readonly retryAfter: ComboRetryAfter | null;
+  readonly bodyText: string | null;
+  readonly structuredRetryAfter: ComboRetryAfter | null;
   /** Quota historically accepts only string messages and uses full non-JSON text. */
   readonly quota: {
     text: string;
@@ -85,9 +86,6 @@ export async function readAttemptFailure(
   } catch {
     unreadable("clone failed");
   }
-  retryAfter ||= readProseRetryAfter(bodyText);
-  retryAfter ||= parseRetryAfterHeader(response.headers);
-
   // These two projections intentionally retain their different historical
   // semantics. Sharing decoding must not silently change quota classification.
   let quotaText = response.statusText;
@@ -116,7 +114,17 @@ export async function readAttemptFailure(
     errorText: errorText as string,
     errorBody,
     structuredError: structuredError(errorBody?.error),
-    retryAfter,
+    bodyText,
+    structuredRetryAfter: retryAfter,
     quota: { text: quotaText, structuredError: quotaError },
   };
+}
+
+/** Resolve routing hints explicitly: prose opt-in consults the feature-flag DB. */
+export function resolveAttemptRetryAfter(failure: AttemptFailure): ComboRetryAfter | null {
+  return (
+    failure.structuredRetryAfter ||
+    readProseRetryAfter(failure.bodyText) ||
+    parseRetryAfterHeader(failure.response.headers)
+  );
 }
