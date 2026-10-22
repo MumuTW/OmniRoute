@@ -1,0 +1,1 @@
+- **fix(api):** Return a sanitized JSON 400 with a `POST /v1/search` hint when a search-only provider is used for chat completions; preserve the error in streams that have already started and release request admission capacity. Fixes #17858 — thanks @manjughosa and @MumuTW.
