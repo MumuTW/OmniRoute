@@ -70,7 +70,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function handleChatRejection(error: unknown): Response {
+function handleChatRejection(error: unknown, correlationId: string): Response {
   if (!(error instanceof SearchProviderChatError)) throw error;
 
   const response = errorResponse(error.status, error.message, {
@@ -78,6 +78,7 @@ function handleChatRejection(error: unknown): Response {
     code: error.code,
   });
   for (const [name, value] of Object.entries(CORS_HEADERS)) response.headers.set(name, value);
+  response.headers.set("X-Correlation-Id", correlationId);
   return response;
 }
 
@@ -328,17 +329,17 @@ export async function POST(request) {
     const callerCorrelationId = resolveIncomingCorrelationId(
       request.headers.get("x-correlation-id")
     );
+    const reqId = callerCorrelationId ?? generateRequestId();
 
     if (wantsStreaming) {
-      const reqId = callerCorrelationId ?? generateRequestId();
       const { signal: routeDeadlineSignal, deadlineController: routeDeadlineController } =
         createStreamDeadlineSignal(request.signal);
       // Wrap the real handler response, not the synthetic early-keepalive response. If the
       // client cancels while handleChat is still pending, earlyStreamKeepalive will cancel the
       // eventual handler body; only that confirmed cleanup releases heavyweight capacity.
       const handlerResponse = releaseChatAdmissionAfterHandler(
-        handleChat(request, null, parsedBody, reqId, routeDeadlineSignal).catch(
-          handleChatRejection
+        handleChat(request, null, parsedBody, reqId, routeDeadlineSignal).catch((error) =>
+          handleChatRejection(error, reqId)
         ),
         admission.lease,
         { signal: routeDeadlineSignal }
@@ -358,8 +359,8 @@ export async function POST(request) {
 
     return finishAdmission(
       withCompressionHeaderEcho(
-        await handleChat(request, null, parsedBody, callerCorrelationId ?? undefined).catch(
-          handleChatRejection
+        await handleChat(request, null, parsedBody, reqId).catch((error) =>
+          handleChatRejection(error, reqId)
         ),
         compressionRequestHeader
       )

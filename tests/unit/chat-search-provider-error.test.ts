@@ -43,6 +43,7 @@ test.after(async () => {
 
 for (const stream of [false, true]) {
   test(`#17858: search-provider chat rejection is JSON 400 with stream=${stream} and releases admission`, async () => {
+    const correlationId = `search-rejection-${stream}`;
     assert.equal(admission.perConnectionAdmissionController.activeHeavy, 0);
     fetchCalls = 0;
     const body = JSON.stringify({
@@ -72,6 +73,7 @@ for (const stream of [false, true]) {
           "Content-Type": "application/json",
           "Content-Length": String(bytes.byteLength),
           Accept: stream ? "text/event-stream" : "application/json",
+          "X-Correlation-Id": correlationId,
         },
         body: requestBody,
         duplex: "half",
@@ -81,6 +83,7 @@ for (const stream of [false, true]) {
     assert.equal(observedHeavyAdmission, true, "the fixture must acquire real admission");
     assert.equal(response.status, 400);
     assert.match(response.headers.get("content-type") || "", /application\/json/);
+    assert.equal(response.headers.get("x-correlation-id"), correlationId);
     assert.equal(response.headers.get("access-control-allow-origin"), null);
     assert.equal(
       response.headers.get("access-control-allow-methods"),
@@ -100,6 +103,14 @@ for (const stream of [false, true]) {
     assert.equal(admission.perConnectionAdmissionController.activeHeavy, 0);
   });
 }
+
+test("a non-streaming search-provider rejection includes a generated correlation ID", async () => {
+  const response = await POST(makeExecutorFailureRequest(false));
+  assert.equal(response.status, 400);
+  assert.ok(response.headers.get("x-correlation-id"));
+  await response.body?.cancel();
+  assert.equal(admission.perConnectionAdmissionController.activeHeavy, 0);
+});
 
 test("an existing retired-provider rejection keeps its status and public classification", async () => {
   const response = await POST(
@@ -164,6 +175,7 @@ test("a search-provider rejection after keepalive stays SSE 200 with a sanitized
 
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") || "", /text\/event-stream/);
+  assert.ok(response.headers.get("x-correlation-id"));
   const text = await response.text();
   const frames = text
     .split("\n")
