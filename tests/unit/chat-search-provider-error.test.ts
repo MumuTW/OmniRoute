@@ -21,7 +21,6 @@ const { POST } = await import("../../src/app/api/v1/chat/completions/route.ts");
 const admission = await import("../../src/shared/middleware/chatBodyAdmission.ts");
 const { registerLazyExecutor } = await import("../../open-sse/executors/index.ts");
 const { SearchProviderChatError } = await import("../../open-sse/utils/searchProviderChatError.ts");
-const { CORS_HEADERS } = await import("../../src/shared/utils/cors.ts");
 
 test.before(async () => {
   await providersDb.createProviderConnection({
@@ -84,15 +83,10 @@ for (const stream of [false, true]) {
     assert.equal(response.status, 400);
     assert.match(response.headers.get("content-type") || "", /application\/json/);
     assert.equal(response.headers.get("x-correlation-id"), correlationId);
+    // The rejection is now an ordinary chatCore error result, so like every other handleChat
+    // 4xx it carries no per-route CORS block (the proxy layer applies CORS); it must never
+    // grant a wildcard origin on its own.
     assert.equal(response.headers.get("access-control-allow-origin"), null);
-    assert.equal(
-      response.headers.get("access-control-allow-methods"),
-      CORS_HEADERS["Access-Control-Allow-Methods"]
-    );
-    assert.equal(
-      response.headers.get("access-control-allow-headers"),
-      CORS_HEADERS["Access-Control-Allow-Headers"]
-    );
     const text = await response.text();
     const payload = JSON.parse(text) as { error: { message: string; type: string; code: string } };
     assert.match(payload.error.message, /\/v1\/search/);

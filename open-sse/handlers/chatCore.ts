@@ -152,6 +152,7 @@ import {
   sanitizeErrorMessage,
   sanitizeUpstreamDetails,
 } from "../utils/error.ts";
+import { SearchProviderChatError } from "../utils/searchProviderChatError.ts";
 import {
   reportMalformed200,
   detectMalformedNonStream,
@@ -2387,7 +2388,18 @@ async function handleChatCoreInner({
     }
   }
   // Get executor for this provider (with optional upstream proxy routing)
-  const executor = await resolveExecutorWithProxy(provider);
+  let executor: Awaited<ReturnType<typeof resolveExecutorWithProxy>>;
+  try {
+    executor = await resolveExecutorWithProxy(provider);
+  } catch (error) {
+    // #17858: a search-only provider is a client routing mistake, not a server fault. Answer
+    // it here so /v1/chat/completions, /v1/messages and /v1/responses all return the typed
+    // 400 (with the POST /v1/search hint) instead of an empty 500. Anything else rethrows.
+    if (!(error instanceof SearchProviderChatError)) throw error;
+    log?.warn?.("EXECUTOR", error.message);
+    trackPendingRequest(model, provider, pendingConnId, false, undefined, pendingRequestId);
+    return createErrorResult(error.status, error.message, null, error.code, "invalid_request_error");
+  }
   const getExecutionCredentials = () =>
     withApiKeyCodexServiceMode(
       provider,

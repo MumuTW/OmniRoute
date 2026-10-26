@@ -6,7 +6,6 @@ import { logAdmissionRejection } from "@/sse/handlers/admissionRejectionLog";
 import { generateRequestId } from "@/shared/utils/requestId";
 import { resolveIncomingCorrelationId } from "@/shared/utils/correlationPreserve.ts";
 import { errorResponse } from "@omniroute/open-sse/utils/error.ts";
-import { SearchProviderChatError } from "@omniroute/open-sse/utils/searchProviderChatError.ts";
 import {
   handleSelfHostedCompletions,
   isSelfHostedEntryConfigured,
@@ -80,18 +79,6 @@ function ensureInitialized() {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function handleChatRejection(error: unknown, correlationId: string): Response {
-  if (!(error instanceof SearchProviderChatError)) throw error;
-
-  const response = errorResponse(error.status, error.message, {
-    type: "invalid_request_error",
-    code: error.code,
-  });
-  for (const [name, value] of Object.entries(CORS_HEADERS)) response.headers.set(name, value);
-  response.headers.set("X-Correlation-Id", correlationId);
-  return response;
 }
 
 // Minimal request-shape validation (Rule #7 / T06 gate). This is the hottest path in the
@@ -415,9 +402,7 @@ export async function POST(request) {
       // client cancels while handleChat is still pending, earlyStreamKeepalive will cancel the
       // eventual handler body; only that confirmed cleanup releases heavyweight capacity.
       const handlerResponse = releaseChatAdmissionAfterHandler(
-        handleChat(request, null, parsedBody, reqId, routeDeadlineSignal).catch((error) =>
-          handleChatRejection(error, reqId)
-        ),
+        handleChat(request, null, parsedBody, reqId, routeDeadlineSignal),
         admission.lease,
         { signal: routeDeadlineSignal }
       );
@@ -439,11 +424,7 @@ export async function POST(request) {
 
     return finishAdmission(
       withCompressionHeaderEcho(
-        applyFallbackHeaders(
-          await handleChat(request, null, parsedBody, reqId).catch((error) =>
-            handleChatRejection(error, reqId)
-          )
-        ),
+        applyFallbackHeaders(await handleChat(request, null, parsedBody, reqId)),
         compressionRequestHeader
       )
     );
