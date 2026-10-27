@@ -46,6 +46,36 @@ function isQuotaStatus(status: number): boolean {
   return status === 402 || status === 429 || status === 403;
 }
 
+/** Gemini 429s: per-minute limits are transient, per-day limits are terminal, else undecided. */
+function geminiQuotaVerdict(provider: string | null, status: number, text: string): boolean | null {
+  if (provider !== "gemini" || status !== 429) return null;
+  const metric = classifyGeminiQuotaMetricFromText(text);
+  if (metric === "rpm" || metric === "tpm") return false;
+  return metric === "rpd" ? true : null;
+}
+
+function hasTerminalQuotaCode(
+  structuredError: AttemptFailure["quota"]["structuredError"]
+): boolean {
+  const code = structuredError?.code?.toLowerCase();
+  const type = structuredError?.type?.toLowerCase();
+  return Boolean(
+    (code && TERMINAL_QUOTA_CODES.has(code)) || (type && TERMINAL_QUOTA_CODES.has(type))
+  );
+}
+
+function hasTerminalQuotaText(text: string): boolean {
+  return /\b(?:billing hard limit reached|credits? exhausted|subscription quota exhausted)\b/i.test(
+    text
+  );
+}
+
+function isOpenAiCompatibleProvider(provider: string | null): boolean {
+  return Boolean(
+    provider?.startsWith("openai-compatible-") || provider?.startsWith("openai-compatible-chat-")
+  );
+}
+
 /** Classify the same decoded facts used by the combo retry/fallback policy. */
 export function isQuotaExhaustionFailure(
   failure: AttemptFailure,
@@ -58,32 +88,10 @@ export function isQuotaExhaustionFailure(
   if (trusted !== undefined) return trusted;
   if (!isQuotaStatus(response.status)) return false;
   const { text, structuredError } = quota;
-  if (provider === "gemini" && response.status === 429) {
-    const metric = classifyGeminiQuotaMetricFromText(text);
-    if (metric === "rpm" || metric === "tpm") return false;
-    if (metric === "rpd") return true;
-  }
-  const normalizedCode = structuredError?.code?.toLowerCase();
-  const normalizedType = structuredError?.type?.toLowerCase();
-  if (
-    (normalizedCode && TERMINAL_QUOTA_CODES.has(normalizedCode)) ||
-    (normalizedType && TERMINAL_QUOTA_CODES.has(normalizedType))
-  ) {
-    return true;
-  }
-
-  if (
-    /\b(?:billing hard limit reached|credits? exhausted|subscription quota exhausted)\b/i.test(text)
-  ) {
-    return true;
-  }
-
-  if (
-    provider?.startsWith("openai-compatible-") ||
-    provider?.startsWith("openai-compatible-chat-")
-  ) {
-    return false;
-  }
+  const gemini = geminiQuotaVerdict(provider, response.status, text);
+  if (gemini !== null) return gemini;
+  if (hasTerminalQuotaCode(structuredError) || hasTerminalQuotaText(text)) return true;
+  if (isOpenAiCompatibleProvider(provider)) return false;
 
   return (
     checkFallbackError(
