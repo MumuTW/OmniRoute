@@ -2,7 +2,8 @@
 
 This is an **orphan branch** — it shares no history with `main` or `release/*`, and
 holds exactly one thing: the workflow that keeps this fork aligned with
-[`diegosouzapw/OmniRoute`](https://github.com/diegosouzapw/OmniRoute).
+[`cheaper-inference/OmniRoute`](https://github.com/cheaper-inference/OmniRoute)
+(formerly `diegosouzapw/OmniRoute`).
 
 ## Why it is the default branch
 
@@ -27,10 +28,13 @@ when upstream bumps to the next version.
 
 ## Token
 
-The workflow tries `GITHUB_TOKEN` first. If upstream commits touch
-`.github/workflows/**`, GitHub may refuse the ref update; in that case add a PAT
-with `repo` + `workflow` scope as a repository secret named `SYNC_TOKEN` and the
-workflow will use it instead.
+Add a PAT with `repo` + `workflow` scope (or a fine-grained token with Contents
+and Workflows read/write on this repo) as a repository secret named `SYNC_TOKEN`.
+It is effectively required: `GITHUB_TOKEN` can never be granted the `workflows`
+permission, so GitHub refuses any ref update that brings in `.github/workflows/**`
+changes, and upstream `main` and `release/*` touch those files in almost every
+batch. Without it the workflow falls back to `GITHUB_TOKEN`, and the run fails
+with the API error for each branch it could not update.
 
 ## Local checkout
 
